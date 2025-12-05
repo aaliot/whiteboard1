@@ -12,6 +12,7 @@ const WhiteboardInfoBackendService = new WBInfoBackendService();
 
 import redisAdapter from "./services/RedisAdapter.js";
 import redisWhiteboardService from "./services/RedisWhiteboardService.js";
+import metricsService from "./services/MetricsService.js";
 
 import { getSafeFilePath } from "./utils.js";
 
@@ -89,10 +90,12 @@ export default async function startBackendServer(port) {
                 });
                 
                 useDistributed = true;
+                metricsService.setRedisConnected(true);
                 console.log(`✅ Distributed mode enabled (Node: ${NODE_ID})`);
             }
         } catch (error) {
             console.warn("⚠️ Redis connection failed, falling back to standalone mode:", error.message);
+            metricsService.setRedisConnected(false);
         }
     }
 
@@ -112,12 +115,25 @@ export default async function startBackendServer(port) {
 
     // Health check endpoint for load balancer
     app.get("/api/health", function (req, res) {
+        metricsService.requestReceived();
         res.status(200).json({
             status: "healthy",
             nodeId: NODE_ID,
             distributed: useDistributed,
             timestamp: new Date().toISOString()
         });
+    });
+
+    // Prometheus metrics endpoint
+    app.get("/metrics", function (req, res) {
+        res.set("Content-Type", "text/plain");
+        res.send(metricsService.getPrometheusMetrics(NODE_ID));
+    });
+
+    // JSON metrics endpoint
+    app.get("/api/metrics", function (req, res) {
+        metricsService.requestReceived();
+        res.json(metricsService.getJsonMetrics(NODE_ID));
     });
 
     // Node info endpoint
@@ -318,9 +334,11 @@ export default async function startBackendServer(port) {
     io.on("connection", function (socket) {
         let whiteboardId = null;
         
+        metricsService.connectionOpened();
         console.log(`[${NODE_ID}] Client connected: ${socket.id}`);
 
         socket.on("disconnect", function () {
+            metricsService.connectionClosed();
             console.log(`[${NODE_ID}] Client disconnected: ${socket.id}`);
             WhiteboardInfoBackendService.leave(socket.id, whiteboardId);
             socket.compress(false).broadcast.to(whiteboardId).emit("refreshUserBadges", null);
@@ -333,6 +351,8 @@ export default async function startBackendServer(port) {
             content = purifyEncodedStrings(content);
 
             if (accessToken === "" || accessToken == content["at"]) {
+                metricsService.drawEvent();
+                
                 const broadcastTo = (wid) =>
                     socket.compress(false).broadcast.to(wid).emit("drawToWhiteboard", content);
                 
@@ -354,6 +374,7 @@ export default async function startBackendServer(port) {
             content = escapeAllContentStrings(content);
             if (accessToken === "" || accessToken == content["at"]) {
                 whiteboardId = content["wid"];
+                metricsService.whiteboardJoined(whiteboardId);
 
                 socket.emit("whiteboardConfig", {
                     common: config.frontend,

@@ -1,0 +1,33 @@
+# Prometheus configuration for Whiteboard monitoring
+# Scrapes metrics from all whiteboard nodes
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Whiteboard Node 1
+  - job_name: 'whiteboard-node-1'
+    static_configs:
+      - targets: ['10.0.0.3:8080']
+        labels:
+          node: 'node-1'
+          zone: 'europe-west2-a'
+
+  # Whiteboard Node 2  
+  - job_name: 'whiteboard-node-2'
+    static_configs:
+      - targets: ['10.0.0.4:8080']
+        labels:
+          node: 'node-2'
+          zone: 'europe-west2-b'
+
+  # Redis Server (if you add redis_exporter later)
+  # - job_name: 'redis'
+  #   static_configs:
+  #     - targets: ['10.0.0.2:9121']
