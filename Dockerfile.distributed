@@ -1,0 +1,58 @@
+# Dockerfile for Distributed Whiteboard Application
+# Supports Redis-based state synchronization for multi-node deployment
+
+FROM node:18 AS base
+
+# Create app directory
+RUN mkdir -p /opt/app
+WORKDIR /opt/app
+
+# Install app dependencies
+COPY ./package.json package-lock.json ./
+RUN npm install
+
+# Bundle frontend
+COPY src ./src
+COPY assets ./assets
+COPY config ./config
+RUN npm run build
+
+#####################
+# Final image
+#####################
+
+FROM node:18-alpine
+ENV NODE_ENV=prod
+
+LABEL maintainer="cloud-computing-480222"
+LABEL description="Distributed Whiteboard Application with Redis support"
+
+# Create app directory
+RUN mkdir -p /opt/app
+WORKDIR /opt/app
+
+# Install dependencies
+COPY ./package.json ./package-lock.json config.default.yml ./
+RUN npm install --only=prod
+
+# Copy application files
+COPY scripts ./scripts
+COPY --from=base /opt/app/dist ./dist
+
+# Create directories for data persistence
+RUN mkdir -p /opt/app/public/uploads /opt/app/savedBoards
+
+# Environment variables for distributed setup
+ENV PORT=8080
+ENV NODE_ID=node-default
+ENV REDIS_URL=redis://localhost:6379
+ENV USE_REDIS=true
+
+# Expose port
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD wget --quiet --tries=1 --spider http://localhost:8080/api/health || exit 1
+
+ENTRYPOINT ["npm", "run", "start"]

@@ -30,6 +30,7 @@
     }
   },
   "dependencies": {
+    "@socket.io/redis-adapter": "^8.2.1",
     "ajv": "^8.12.0",
     "apidoc": "^1.2.0",
     "dompurify": "^2.3.4",
@@ -41,6 +42,7 @@
     "js-yaml": "3.13.1",
     "jsdom": "^16.5.0",
     "jsprim": "^1.4.2",
+    "redis": "^4.6.11",
     "signature_pad": "^4.0.1",
     "socket.io": "^4.8.0",
     "socket.io-client": "^4.4.0",

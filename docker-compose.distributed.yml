@@ -1,0 +1,98 @@
+# Docker Compose for Distributed Whiteboard Deployment
+# This configuration sets up a distributed whiteboard system with Redis
+# for state synchronization across multiple nodes
+
+version: "3.8"
+
+services:
+  # Redis for distributed state management and Socket.IO adapter
+  redis:
+    image: redis:7-alpine
+    container_name: whiteboard-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    networks:
+      - whiteboard-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Whiteboard Node 1
+  whiteboard-node1:
+    build: .
+    image: whiteboard-distributed:latest
+    container_name: whiteboard-node1
+    restart: always
+    environment:
+      - NODE_ID=node1
+      - REDIS_URL=redis://redis:6379
+      - USE_REDIS=true
+      - PORT=8080
+    ports:
+      - "8081:8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - whiteboard-network
+    volumes:
+      - node1-uploads:/opt/app/public/uploads
+      - shared-boards:/opt/app/savedBoards
+
+  # Whiteboard Node 2
+  whiteboard-node2:
+    build: .
+    image: whiteboard-distributed:latest
+    container_name: whiteboard-node2
+    restart: always
+    environment:
+      - NODE_ID=node2
+      - REDIS_URL=redis://redis:6379
+      - USE_REDIS=true
+      - PORT=8080
+    ports:
+      - "8082:8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - whiteboard-network
+    volumes:
+      - node2-uploads:/opt/app/public/uploads
+      - shared-boards:/opt/app/savedBoards
+
+  # Nginx Load Balancer
+  nginx:
+    image: nginx:alpine
+    container_name: whiteboard-lb
+    restart: always
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - whiteboard-node1
+      - whiteboard-node2
+    networks:
+      - whiteboard-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  whiteboard-network:
+    driver: bridge
+
+volumes:
+  redis-data:
+  node1-uploads:
+  node2-uploads:
+  shared-boards:
