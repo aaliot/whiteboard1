@@ -1,5 +1,4 @@
 import { getArgs } from "./utils.js";
-import startBackendServer from "./server-backend.js";
 
 const SERVER_MODES = {
     PRODUCTION: 1,
@@ -18,6 +17,18 @@ if (args.mode !== "production" && args.mode !== "development") {
 }
 
 const server_mode = args.mode === "production" ? SERVER_MODES.PRODUCTION : SERVER_MODES.DEVELOPMENT;
+
+// Check if Redis/distributed mode is enabled
+const useRedis = process.env.USE_REDIS === "true";
+
+// Import the appropriate backend based on configuration
+let startBackendServer;
+if (useRedis) {
+    console.info("Redis distributed mode enabled.");
+    startBackendServer = (await import("./server-backend-distributed.js")).default;
+} else {
+    startBackendServer = (await import("./server-backend.js")).default;
+}
 
 if (server_mode === SERVER_MODES.DEVELOPMENT) {
     let startFrontendDevServer = (await import("./server-frontend-dev.js")).startFrontendDevServer;
